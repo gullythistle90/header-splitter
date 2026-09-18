@@ -1,0 +1,19 @@
+{
+  "name": "header-splitter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A TypeScript library and CLI for correctly parsing HTTP header lists, parameters, and names.",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "header-splitter": "dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/tests"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
