@@ -122,6 +122,7 @@ export function parseParameters(value: string): ParsedHeaderValue {
 
   const [head = '', ...rest] = parts;
   const params: Record<string, string> = {};
+  const extended: Array<[string, string]> = [];
 
   for (const part of rest) {
     const [rawKey, rawVal] = splitFirstEquals(part);
@@ -129,10 +130,86 @@ export function parseParameters(value: string): ParsedHeaderValue {
     if (key.length === 0) {
       continue;
     }
+
+    // An RFC 5987 extended parameter ("filename*=UTF-8''%e2%82%ac.txt") is
+    // marked by a trailing "*" on the name and needs its own decoding, not
+    // the quoted-string unescaping used for ordinary parameter values.
+    if (key.length > 1 && key.endsWith('*') && rawVal !== null) {
+      extended.push([key.slice(0, -1), rawVal.trim()]);
+      continue;
+    }
+
     params[key] = rawVal === null ? '' : unquote(rawVal.trim());
   }
 
+  // Apply extended values last so they win over a plain same-named
+  // parameter regardless of which order the two appeared in, matching the
+  // RFC 6266 guidance that filename* should be preferred over filename.
+  for (const [baseKey, rawVal] of extended) {
+    params[baseKey] = decodeExtendedValue(rawVal).value;
+  }
+
   return { value: head, params };
+}
+
+export interface ExtendedValue {
+  charset: string;
+  language: string | null;
+  value: string;
+}
+
+function percentDecodeToBytes(raw: string): number[] {
+  const bytes: number[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '%' && /^[0-9A-Fa-f]{2}$/.test(raw.slice(i + 1, i + 3))) {
+      bytes.push(parseInt(raw.slice(i + 1, i + 3), 16));
+      i += 2;
+      continue;
+    }
+    bytes.push(ch.charCodeAt(0));
+  }
+  return bytes;
+}
+
+/**
+ * Decodes the value side of an RFC 5987 extended parameter, e.g. the part
+ * after "=" in `filename*=UTF-8''%e2%82%ac%20rates.txt`: charset, an
+ * optional language tag, and percent-encoded octets, each separated by a
+ * single quote.
+ *
+ * Only the two charsets the RFC actually registers are decoded: UTF-8 is
+ * decoded as UTF-8 bytes, and ISO-8859-1 is decoded byte-for-byte since its
+ * first 256 code points line up exactly with Unicode's. Anything else comes
+ * back with its percent-encoding untouched, since guessing at an unknown
+ * encoding would silently corrupt the value rather than fail loudly.
+ */
+export function decodeExtendedValue(raw: string): ExtendedValue {
+  const firstQuote = raw.indexOf("'");
+  const secondQuote = firstQuote === -1 ? -1 : raw.indexOf("'", firstQuote + 1);
+
+  if (firstQuote === -1 || secondQuote === -1) {
+    return { charset: '', language: null, value: raw };
+  }
+
+  const charset = raw.slice(0, firstQuote);
+  const language = raw.slice(firstQuote + 1, secondQuote) || null;
+  const encoded = raw.slice(secondQuote + 1);
+
+  switch (charset.toLowerCase()) {
+    case 'utf-8':
+      return { charset, language, value: new TextDecoder().decode(Uint8Array.from(percentDecodeToBytes(encoded))) };
+    case 'iso-8859-1':
+      return {
+        charset,
+        language,
+        value: percentDecodeToBytes(encoded)
+          .map((byte) => String.fromCharCode(byte))
+          .join(''),
+      };
+    default:
+      return { charset, language, value: encoded };
+  }
 }
 
 const TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;

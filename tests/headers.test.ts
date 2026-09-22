@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseList, parseParameters, normalizeHeaderName, isValidHeaderName } from '../src/index';
+import {
+  parseList,
+  parseParameters,
+  normalizeHeaderName,
+  isValidHeaderName,
+  decodeExtendedValue,
+} from '../src/index';
 
 test('parseList handles the awkward comma cases', () => {
   const cases: Array<[string, string[]]> = [
@@ -36,6 +42,64 @@ test('parseParameters handles quoting, escaping, and bare flags', () => {
   for (const [input, expected] of cases) {
     assert.deepEqual(parseParameters(input), expected, `parseParameters(${JSON.stringify(input)})`);
   }
+});
+
+test('parseParameters decodes RFC 5987 extended parameters', () => {
+  const cases: Array<[string, ReturnType<typeof parseParameters>]> = [
+    [
+      "attachment; filename*=UTF-8''%e2%82%ac%20rates.txt",
+      { value: 'attachment', params: { filename: '€ rates.txt' } },
+    ],
+    [
+      // Extended form must win over the plain fallback, regardless of order.
+      "attachment; filename=\"EURO rates.txt\"; filename*=UTF-8''%e2%82%ac%20rates.txt",
+      { value: 'attachment', params: { filename: '€ rates.txt' } },
+    ],
+    [
+      "attachment; filename*=UTF-8''%e2%82%ac%20rates.txt; filename=\"EURO rates.txt\"",
+      { value: 'attachment', params: { filename: '€ rates.txt' } },
+    ],
+    [
+      "attachment; filename*=ISO-8859-1''%A3%20rates.pdf",
+      { value: 'attachment', params: { filename: '£ rates.pdf' } },
+    ],
+    [
+      "attachment; filename*=UTF-8'en'plain.txt",
+      { value: 'attachment', params: { filename: 'plain.txt' } },
+    ],
+  ];
+
+  for (const [input, expected] of cases) {
+    assert.deepEqual(parseParameters(input), expected, `parseParameters(${JSON.stringify(input)})`);
+  }
+});
+
+test('decodeExtendedValue reports charset, language, and value separately', () => {
+  assert.deepEqual(decodeExtendedValue("UTF-8'en'plain.txt"), {
+    charset: 'UTF-8',
+    language: 'en',
+    value: 'plain.txt',
+  });
+
+  assert.deepEqual(decodeExtendedValue("UTF-8''%e2%82%ac"), {
+    charset: 'UTF-8',
+    language: null,
+    value: '€',
+  });
+
+  // Unknown charsets are left percent-encoded rather than guessed at.
+  assert.deepEqual(decodeExtendedValue("Shift_JIS''%82%a0"), {
+    charset: 'Shift_JIS',
+    language: null,
+    value: '%82%a0',
+  });
+
+  // No charset delimiter at all: hand back the raw text unchanged.
+  assert.deepEqual(decodeExtendedValue('plain.txt'), {
+    charset: '',
+    language: null,
+    value: 'plain.txt',
+  });
 });
 
 test('normalizeHeaderName canonicalizes known irregular headers', () => {

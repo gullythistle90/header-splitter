@@ -41,7 +41,19 @@ normalizeHeaderName('etag');
 
 normalizeHeaderName('x-request-id');
 // 'X-Request-Id'
+
+parseParameters("attachment; filename*=UTF-8''%e2%82%ac%20rates.txt");
+// { value: 'attachment', params: { filename: '€ rates.txt' } }
 ```
+
+`parseParameters` understands RFC 5987 extended parameters (`name*=charset'lang'value`),
+such as `Content-Disposition`'s `filename*`. It percent-decodes the value and stores
+the result under the parameter name without the trailing `*`, overriding a plain
+same-named parameter if both are present — servers send both so that older clients
+fall back to the plain ASCII `filename`. Only the two charsets the RFC registers,
+UTF-8 and ISO-8859-1, are decoded; anything else is left percent-encoded rather than
+guessed at. Use `decodeExtendedValue` directly if you need the charset or language
+tag rather than just the decoded value.
 
 ## CLI usage
 
@@ -75,6 +87,7 @@ header casing) rather than one assertion per case written out by hand.
 
 `parseList` and `parseParameters` cover the common RFC 7230/7231 list and
 parameter grammars, but not the newer Structured Field Values syntax (RFC
-8941) used by some newer headers. `parseParameters` also doesn't yet handle
-RFC 5987 extended parameters (`filename*=UTF-8''...`); it treats the `*` as
-part of the parameter name.
+8941) used by some newer headers. There's also no dedicated Set-Cookie
+attribute parser yet — `parseList` must not be used on Set-Cookie, per the
+comma caveat above, and `parseParameters` hasn't been taught Set-Cookie's
+attribute grammar either.
