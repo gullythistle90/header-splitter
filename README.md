@@ -55,6 +55,24 @@ UTF-8 and ISO-8859-1, are decoded; anything else is left percent-encoded rather 
 guessed at. Use `decodeExtendedValue` directly if you need the charset or language
 tag rather than just the decoded value.
 
+### Set-Cookie
+
+`parseSetCookie` parses one Set-Cookie header line using the RFC 6265 rules. It
+never splits on commas and treats quotes in the cookie value as literal, so the
+`Expires` date survives intact:
+
+```ts
+parseSetCookie('session=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Secure; SameSite=Lax');
+// { name: 'session', value: 'abc', expires: Date(2026-10-21T07:28:00Z),
+//   sameSite: 'Lax', secure: true, httpOnly: false, partitioned: false,
+//   extensions: [] }
+```
+
+It returns `null` when there is no `name=value` pair. Invalid attribute values
+(a non-numeric `Max-Age`, an unparseable `Expires`) are skipped individually.
+Unknown attributes are kept in `extensions`. If a response has several
+Set-Cookie headers, parse each one separately.
+
 ## CLI usage
 
 ```
@@ -87,7 +105,9 @@ header casing) rather than one assertion per case written out by hand.
 
 `parseList` and `parseParameters` cover the common RFC 7230/7231 list and
 parameter grammars, but not the newer Structured Field Values syntax (RFC
-8941) used by some newer headers. There's also no dedicated Set-Cookie
-attribute parser yet — `parseList` must not be used on Set-Cookie, per the
-comma caveat above, and `parseParameters` hasn't been taught Set-Cookie's
-attribute grammar either.
+8941) used by some newer headers. `parseList` and `parseParameters` must not
+be used on Set-Cookie, per the comma caveat above; use `parseSetCookie`.
+`parseSetCookie` does not apply cookie-domain or public-suffix checks, and
+`Expires` is read with `Date.parse` rather than the RFC 6265 date algorithm,
+so oddly formatted dates may be accepted or rejected differently than in a
+browser.

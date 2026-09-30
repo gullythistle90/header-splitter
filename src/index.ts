@@ -1,3 +1,6 @@
+export { parseSetCookie } from './setcookie';
+export type { SetCookie, SameSite } from './setcookie';
+
 /**
  * Splits a header field value on a separator character, but only where that
  * separator sits outside of a quoted string. Quoted-string escaping

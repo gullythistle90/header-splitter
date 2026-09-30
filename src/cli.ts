@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { parseList, parseParameters, normalizeHeaderName } from './index';
+import { parseList, parseParameters, parseSetCookie, normalizeHeaderName } from './index';
 
 function usage(): void {
-  console.error('usage: header-splitter <list|params|name> <value>');
+  console.error('usage: header-splitter <list|params|setcookie|name> <value>');
+  console.error('  setcookie "id=abc; Path=/; Secure"');
   console.error('  list "text/html, application/xhtml+xml;q=0.9"');
   console.error('  params "text/html; charset=utf-8"');
   console.error('  name "content-type"');
@@ -18,6 +19,9 @@ function main(argv: string[]): number {
       return 0;
     case 'params':
       console.log(JSON.stringify(parseParameters(value)));
+      return 0;
+    case 'setcookie':
+      console.log(JSON.stringify(parseSetCookie(value)));
       return 0;
     case 'name':
       console.log(normalizeHeaderName(value));
